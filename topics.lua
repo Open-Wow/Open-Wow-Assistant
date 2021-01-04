@@ -17,16 +17,18 @@ function topics.getLatestComment()
   local getComment = assert(mysqlClient:execute("SELECT `discussion_id`, `created_at` FROM `posts` WHERE `created_at` = (SELECT MAX(`created_at`)  FROM `posts`) and type != 'discussionTagged' and number > 2"))
   local commentRow = getComment:fetch({}, "a")
 
-  local getTopics = assert(mysqlClient:execute("SELECT `title`, `slug` FROM `discussions` WHERE `id` = "..commentRow.discussion_id..""))
-  local topicsRow = getTopics:fetch({}, "a")
+  if commentRow then
+    local getTopics = assert(mysqlClient:execute("SELECT `title`, `slug` FROM `discussions` WHERE `id` = "..commentRow.discussion_id..""))
+    local topicsRow = getTopics:fetch({}, "a")
 
-  local tempData = {}
+    local tempData = {}
 
-  if tostring(config.toTimestamp(commentRow.created_at)) > topics.latestComment then
-    table.insert(tempData, {name = tostring(topicsRow.title:toutf8()), value  = 'https://forum.open-wow.eu/d/'..commentRow.discussion_id..'-'..topicsRow.slug..'\n\nDate de mise en ligne : '..commentRow.created_at, inline = false})
-    topics.latestComment = tostring(config.toTimestamp(commentRow.created_at))
+    if tostring(config.toTimestamp(commentRow.created_at)) > topics.latestComment then
+      table.insert(tempData, {name = tostring(topicsRow.title:toutf8()), value  = 'https://forum.open-wow.eu/d/'..commentRow.discussion_id..'-'..topicsRow.slug..'\n\nDate de mise en ligne : '..commentRow.created_at, inline = false})
+      topics.latestComment = tostring(config.toTimestamp(commentRow.created_at))
 
-    return tempData
+      return tempData
+    end
   end
 
   mysqlClient:close()
