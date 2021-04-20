@@ -8,6 +8,12 @@ local openwow = {
     user = 'wowserver',
     pass = 'wowserver',
     db = 'R0_Discord'
+  },
+  roles = {
+    ['cpp'] = '834026020272472094',
+    ['lua'] = '834026046353440768',
+    ['mc'] = '834026079375065089',
+    ['sql'] = '834026002463326218'
   }
 }
   openwow.assistant = {}
@@ -151,28 +157,107 @@ function openwow.linkToAccount(author)
   end
 end
 
+function openwow.setRoles(guild, author)
+  local member = guild:getMember(author.id)
+  local name = author.name
+
+  if (not(member:hasRole(openwow.roles[openwow.members[name].config.command]))) then
+    member:addRole(openwow.roles[openwow.members[name].config.command])
+    return true
+  else
+    member:removeRole(openwow.roles[openwow.members[name].config.command])
+    return false
+  end
+end
+
 client:on('messageCreate', function(message)
   local author = message.author
   local name = author.name
+  local avatar = author.avatarURL
   local channel = message.channel
   local channelId = channel.id
+  local guild = message.guild
 
   if not openwow.members[name] then
     openwow.createMember(name)
   end
 
   if (message.channel.type == 0) then
-    if (channelId == '833975457107017738') then
+    if (channelId == '834035763137478678') then
       if (message.content == '!link') then
-        openwow.members[name].config.command = '!link'
+        openwow.members[name].config.command = message.content
+        local member = guild:getMember(author.id)
 
         openwow.linkToAccount(author)
+
+        channel:send {
+          embed = {
+            title = "Commande link",
+            fields = {
+              {name = 'Votre commande a été reçue, les actions suivantes ont été effectuées :', value = 'Envoie d\'un message privé.', inline = true}
+            },
+            author = {
+              name = name,
+              icon_url = avatar
+            },
+            thumbnail = {url = 'https://cdn.discordapp.com/icons/793570897562173490/f4c76abd317caad9fc9082d6a6c75d00.webp'},
+            color = discordia.Color.fromRGB(0, 255, 0).value,
+            footer = {
+              text = "Commande effectuée le : "..discordia.Date():toISO(' ', ' '),
+            }
+          }
+        }
+
+        message:delete()
+
+      elseif (message.content == '!cpp' or message.content == '!lua' or message.content == '!sql' or message.content == '!mc') then
+        openwow.members[name].config.command = string.lower(message.content:gsub('%!', ''))
+
+        if openwow.setRoles(guild, author) then
+          channel:send {
+            embed = {
+              title = "Commande rôle",
+              fields = {
+                {name = 'Votre commande a été reçue, les actions suivantes ont été effectuées :', value = 'Ajout du rôle '..openwow.members[name].config.command..'.', inline = true}
+              },
+              author = {
+                name = name,
+                icon_url = avatar
+              },
+              thumbnail = {url = 'https://cdn.discordapp.com/icons/793570897562173490/f4c76abd317caad9fc9082d6a6c75d00.webp'},
+              color = discordia.Color.fromRGB(0, 255, 0).value,
+              footer = {
+                text = "Commande effectuée le : "..discordia.Date():toISO(' ', ' '),
+              }
+            }
+          }
+        else
+          channel:send {
+            embed = {
+              title = "Commande rôle",
+              fields = {
+                {name = 'Votre commande a été reçue, les actions suivantes ont été effectuées :', value = 'Suppression du rôle '..openwow.members[name].config.command..'.', inline = true}
+              },
+              author = {
+      					name = name,
+      					icon_url = avatar
+      				},
+              thumbnail = {url = 'https://cdn.discordapp.com/icons/793570897562173490/f4c76abd317caad9fc9082d6a6c75d00.webp'},
+              color = discordia.Color.fromRGB(0, 255, 0).value,
+              footer = {
+                text = "Commande effectuée le : "..discordia.Date():toISO(' ', ' '),
+              }
+            }
+          }
+        end
         message:delete()
       else
-        if name ~= "Assistant" then
+        if author.id ~= "833101104534388746" then
           openwow.members[name].config.step = 0
           openwow.members[name].config.command = ''
           message:delete()
+        else
+          return false
         end
       end
     end
@@ -188,4 +273,4 @@ end)
 
 
 
-client:run('Bot xxx')
+client:run('Bot ODMzMTAxMTA0NTM0Mzg4NzQ2.YHtb3Q.x-7UtMmXxxPn1xcGXG-U626HqDo')
