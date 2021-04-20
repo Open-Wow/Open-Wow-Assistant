@@ -273,4 +273,4 @@ end)
 
 
 
-client:run('Bot ODMzMTAxMTA0NTM0Mzg4NzQ2.YHtb3Q.x-7UtMmXxxPn1xcGXG-U626HqDo')
+client:run('Bot xxx')
