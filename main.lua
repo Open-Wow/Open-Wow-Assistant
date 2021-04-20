@@ -1,159 +1,191 @@
 local discordia = require('discordia')
 local client = discordia.Client()
 
-local rolesManager = require('roles')
-local topicsManager = require('topics')
-local config = require('config')
-
-local CommandList = {
-  ['!cpp'] = 1,
-  ['!lua'] = 2,
-  ['!sql'] = 3,
-  ['?help'] = true,
-  ['?search'] = true
+local openwow = {
+  mysql = {
+    driver = require('luasql.mysql'),
+    host = '127.0.0.1',
+    user = 'wowserver',
+    pass = 'wowserver',
+    db = 'R0_Discord'
+  }
 }
+  openwow.assistant = {}
+  openwow.members = {}
 
-client:on('heartbeat', function()
-  local topicsResult = topicsManager.getLatestTopics()
-  local commentResult = topicsManager.getLatestComment()
+local mysql = assert(openwow.mysql.driver.mysql():connect(openwow.mysql.db, openwow.mysql.user, openwow.mysql.pass));
 
-  local channel = client:getChannel('795322876831203338')
+function openwow.createMember(name)
+  if not name then
+    return false
+  end
 
-  if topicsResult then
-    channel:send {
+  if not openwow.members[name] then
+    openwow.members[name] = {
+      statistics = {
+        discord_messages = 0,
+        forum_topics = 0,
+      },
+      forumUser = nil,
+      isContrib = false,
+
+      config = {
+        command = '',
+        step = 0,
+        informations = ''
+      }
+    }
+    mysql:execute('INSERT INTO user_informations (username, discord_user) VALUES ("", "'..name..'")')
+  else
+    return false
+  end
+
+  return openwow.members[name]
+end
+
+function openwow.getTopics(name)
+  if not name then
+    return false
+  end
+
+  if not openwow.members[name] then
+    openwow.createMember(name)
+  end
+
+  local getTopics = mysql:execute('SELECT topics FROM user_informations WHERE discord_user ="'..name..'"')
+  local row = getTopics:fetch({}, "a")
+
+  if (row) then
+    openwow.members[name].statistics.forum_topics = row.topics
+  end
+  getTopics:close()
+
+  return true
+end
+
+function openwow.setAccount(name, forumName)
+  if not name or not forumName then
+    return false
+  end
+
+  mysql:execute('UPDATE user_informations SET username = "'..forumName..'" WHERE discord_user = "'..name..'"')
+  return true
+end
+
+function openwow.getLink(forumName)
+  if not forumName then
+    return false
+  end
+
+  local getLink = mysql:execute('SELECT discord_user FROM user_informations WHERE username = "'..forumName..'"')
+  local row = getLink:fetch({}, "a")
+  if (row) then
+    return true
+  else
+    return false
+  end
+  getLink:close()
+end
+
+function openwow.getUsername(forumName)
+  if not forumName then
+    return false
+  end
+
+  local getUser = mysql:execute('SELECT * FROM users WHERE username = "'..forumName..'"')
+  local row = getUser:fetch({}, "a")
+  if (row) then
+    return true
+  else
+    return false
+  end
+  getUser:close()
+end
+
+function openwow.linkToAccount(author)
+  local name = author.name
+  if not openwow.members[name] then
+    openwow.createMember(name)
+  end
+
+  if openwow.members[name].config.informations == 'Assistant' or name == 'Assistant' then
+    return false
+  end
+
+  if (openwow.members[name].config.command == '!link') then
+    local msg = ''
+    local color = ''
+    if (openwow.members[name].config.step == 0) then
+      msg = 'Merci de m\'envoyer votre nom d\'utilisateur utilisé sur le forum.'
+      color = discordia.Color.fromRGB(255, 0, 0).value
+    elseif (openwow.members[name].config.step == 1) then
+      if openwow.getUsername(openwow.members[name].config.informations) then
+        if not openwow.getLink(openwow.members[name].config.informations) then
+          if openwow.setAccount(name, openwow.members[name].config.informations) then
+            msg = 'Votre compte Discord est désormais lié à votre compte forum'
+            color = discordia.Color.fromRGB(0, 255, 0).value
+
+            openwow.members[name].config.command = ''
+            openwow.members[name].config.step = 0
+          else
+            msg = 'Une erreur est survenue, merci de contacter un administrateur'
+            color = discordia.Color.fromRGB(255, 0, 0).value
+          end
+        else
+          msg = 'Un utilisateur a déjà lié ce compte forum, si ce n\'est pas vous et que ce compte vous appartiens bien, merci de contacter un administrateur'
+          color = discordia.Color.fromRGB(255, 0, 0).value
+        end
+      else
+        msg = 'Ce compte forum n\'existe pas, merci de renseigner un compte existant'
+        color = discordia.Color.fromRGB(255, 0, 0).value
+      end
+    end
+    author:send {
       embed = {
-        title = "Nouveau Contenu !",
-        fields = topicsResult,
-        author = {
-          name = 'Open-Wow',
-          icon_url = 'https://cdn.discordapp.com/icons/793570897562173490/f4c76abd317caad9fc9082d6a6c75d00.webp'
-        },
-        thumbnail = {url = 'https://cdn.discordapp.com/icons/793570897562173490/f4c76abd317caad9fc9082d6a6c75d00.webp'},
-        color = discordia.Color.fromRGB(0, 255, 0).value,
-        footer = {
-          text = "Commande automatique",
-        }
+        title = 'Lien Discord <-> Forum',
+        description = msg,
+        thumbnail = {url = 'https://forum.open-wow.eu/assets/logo-fje1vtuv.png'},
+        color = color
       }
     }
   end
-  if commentResult then
-    channel:send {
-      embed = {
-        title = "Nouveau Commentaire !",
-        fields = commentResult,
-        author = {
-          name = 'Open-Wow',
-          icon_url = 'https://cdn.discordapp.com/icons/793570897562173490/f4c76abd317caad9fc9082d6a6c75d00.webp'
-        },
-        thumbnail = {url = 'https://cdn.discordapp.com/icons/793570897562173490/f4c76abd317caad9fc9082d6a6c75d00.webp'},
-        color = discordia.Color.fromRGB(255, 165, 0).value,
-        footer = {
-          text = "Commande automatique",
-        }
-      }
-    }
-  end
-end)
-
-client:on('memberJoin', function(member)
-  rolesManager.getRoles(member, 0)
-end)
+end
 
 client:on('messageCreate', function(message)
+  local author = message.author
+  local name = author.name
   local channel = message.channel
-  local channelId = message.channel.id
+  local channelId = channel.id
 
-  if channelId == '794712840241676318' then
-    local authorId = message.author.id
-    if authorId ~= '794651068247179294' then
-      message:delete()
-    end
+  if not openwow.members[name] then
+    openwow.createMember(name)
+  end
 
-    local msg = message.content
-    if CommandList[msg] and type(CommandList[msg]) == 'number' then
-      local member = message.member
+  if (message.channel.type == 0) then
+    if (channelId == '833975457107017738') then
+      if (message.content == '!link') then
+        openwow.members[name].config.command = '!link'
 
-      if rolesManager.getRoles( member, CommandList[msg] ) then
-        channel:send {
-          embed = {
-            title = "Commande rôle",
-            fields = {
-              {name = 'Votre commande a été reçue, les actions suivantes ont été effectuées :', value = 'Ajout du rôle '..msg:gsub("%!", "")..'.', inline = true}
-            },
-            author = {
-    					name = member.user.name,
-    					icon_url = member.user.avatarURL
-    				},
-            thumbnail = {url = 'https://cdn.discordapp.com/icons/793570897562173490/f4c76abd317caad9fc9082d6a6c75d00.webp'},
-            color = discordia.Color.fromRGB(0, 255, 0).value,
-            footer = {
-              text = "Commande effectuée le : "..discordia.Date():toISO(' ', ' '),
-            }
-          }
-        }
+        openwow.linkToAccount(author)
+        message:delete()
       else
-        channel:send {
-          embed = {
-            title = "Commande rôle",
-            fields = {
-              {name = 'Votre commande a été reçue, les actions suivantes ont été effectuées :', value = 'Suppression du rôle '..msg:gsub("%!", "")..'.', inline = true}
-            },
-            author = {
-    					name = member.user.name,
-    					icon_url = member.user.avatarURL
-    				},
-            thumbnail = {url = 'https://cdn.discordapp.com/icons/793570897562173490/f4c76abd317caad9fc9082d6a6c75d00.webp'},
-            color = discordia.Color.fromRGB(0, 255, 0).value,
-            footer = {
-              text = "Commande effectuée le : "..discordia.Date():toISO(' ', ' '),
-            }
-          }
-        }
-      end
-
-    elseif CommandList[string.match(msg, '?search' .. "?")] then
-      if string.match(msg, '?search' .. "?") then
-        local result = topicsManager.getList(msg:gsub('?search' .. " ", ""))
-        local member = message.member
-
-        if result then
-          channel:send {
-            embed = {
-              title = "Commande de recherche",
-              fields = result,
-              author = {
-      					name = member.user.name,
-      					icon_url = member.user.avatarURL
-      				},
-              thumbnail = {url = 'https://cdn.discordapp.com/icons/793570897562173490/f4c76abd317caad9fc9082d6a6c75d00.webp'},
-              color = discordia.Color.fromRGB(0, 255, 0).value,
-              footer = {
-                text = "Commande effectuée le : "..discordia.Date():toISO(' ', ' '),
-              }
-            }
-          }
-        else
-          channel:send {
-            embed = {
-              title = "Commande de recherche",
-              fields = {
-                {name = 'Votre commande a été reçue, votre recherche ne peu malheureusement pas aboutir :', value = 'Merci d\'entrer une valeur de recherche valide, ou faire une demande de tutoriel pour le sujet recherchés.', inline = true}
-              },
-              author = {
-      					name = member.user.name,
-      					icon_url = member.user.avatarURL
-      				},
-              thumbnail = {url = 'https://cdn.discordapp.com/icons/793570897562173490/f4c76abd317caad9fc9082d6a6c75d00.webp'},
-              color = discordia.Color.fromRGB(255, 0, 0).value,
-              footer = {
-                text = "Commande effectuée le : "..discordia.Date():toISO(' ', ' '),
-              }
-            }
-          }
+        if name ~= "Assistant" then
+          openwow.members[name].config.step = 0
+          openwow.members[name].config.command = ''
+          message:delete()
         end
       end
     end
+  elseif (message.channel.type == 1) then
+    if (openwow.members[name].config.command == '!link') then
+      openwow.members[name].config.informations = message.content
+      openwow.members[name].config.step = 1
+
+      openwow.linkToAccount(author)
+    end
   end
 end)
 
-client:run('Bot '..config.discord.token)
+
+
+client:run('Bot xxx')
